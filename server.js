@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -12,10 +14,11 @@ try {
 const app = express();
 app.use(express.json());
 app.use(cors());
+const PORT = Number(process.env.PORT || config.PORT || 3000);
 
 // === MongoDB 连接 ===
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/survey_app';
-const DB_NAME = process.env.MONGO_DB_NAME || undefined;
+const MONGO_URI = process.env.MONGO_URI || config.MONGO_URI || 'mongodb://127.0.0.1:27017/survey_app';
+const DB_NAME = process.env.MONGO_DB_NAME || config.MONGO_DB_NAME || undefined;
 
 mongoose.connect(MONGO_URI, {
     dbName: DB_NAME,
@@ -388,6 +391,6 @@ app.get('/api/admin/db-diagnostics', async (_req, res) => {
 });
 
 // === 启动 HTTP 服务 ===
-app.listen(3000, () => {
-    console.log(`🚀 HTTP server listening on port 3000, mongo=${maskMongoUri(MONGO_URI)}`);
+app.listen(PORT, () => {
+    console.log(`🚀 HTTP server listening on port ${PORT}, mongo=${maskMongoUri(MONGO_URI)}`);
 });
