@@ -27,6 +27,27 @@ const responseSchema = new mongoose.Schema({
 });
 const Response = mongoose.model('Response', responseSchema);
 
+const toNumber = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const pickResponsePayload = (body = {}) => {
+  const payload = {};
+
+  if (body.wx_id !== undefined) payload.wx_id = body.wx_id;
+  if (body.user_info !== undefined) payload.user_info = body.user_info;
+  if (body.answers !== undefined) payload.answers = Array.isArray(body.answers) ? body.answers : [];
+  if (body.duration !== undefined) payload.duration = toNumber(body.duration, 0);
+  if (body.current_question !== undefined) payload.current_question = toNumber(body.current_question, 1);
+  if (body.score !== undefined) payload.score = toNumber(body.score, 0);
+  if (body.status !== undefined) payload.status = body.status;
+  if (body.createdAt !== undefined) payload.createdAt = body.createdAt;
+
+  payload.updatedAt = new Date();
+  return payload;
+};
+
 // === 路由 ===
 app.get('/api/get-user-history', async (req, res) => {
     const { wx_id } = req.query;
@@ -228,6 +249,111 @@ app.post('/api/submit', async (req, res) => {
     res.json({ success: true, score, record_id: record._id });
   } catch (err) {
     console.error("💥 提交出错:", err);
+    res.status(500).json({ error: '服务器内部错误', detail: err.message });
+  }
+});
+
+// === 管理后台 CRUD 接口 ===
+app.get('/api/admin/responses', async (req, res) => {
+  try {
+    const {
+      page = 1,
+      pageSize = 10,
+      wx_id,
+      status,
+      startAt,
+      endAt,
+    } = req.query;
+
+    const p = Math.max(toNumber(page, 1), 1);
+    const ps = Math.max(toNumber(pageSize, 10), 1);
+
+    const filter = {};
+    if (wx_id) filter.wx_id = String(wx_id).trim();
+    if (status) filter.status = String(status).trim();
+
+    if (startAt || endAt) {
+      filter.createdAt = {};
+      if (startAt) filter.createdAt.$gte = new Date(startAt);
+      if (endAt) filter.createdAt.$lte = new Date(endAt);
+    }
+
+    const [list, total] = await Promise.all([
+      Response.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((p - 1) * ps)
+        .limit(ps),
+      Response.countDocuments(filter),
+    ]);
+
+    res.json({
+      data: {
+        list,
+        total,
+        page: p,
+        pageSize: ps,
+      },
+    });
+  } catch (err) {
+    console.error('💥 获取管理列表失败:', err);
+    res.status(500).json({ error: '服务器内部错误', detail: err.message });
+  }
+});
+
+app.post('/api/admin/responses', async (req, res) => {
+  try {
+    const payload = pickResponsePayload(req.body);
+    if (!payload.wx_id) {
+      return res.status(400).json({ error: 'wx_id required' });
+    }
+
+    const created = await Response.create(payload);
+    res.json({ data: created });
+  } catch (err) {
+    console.error('💥 管理新增失败:', err);
+    res.status(500).json({ error: '服务器内部错误', detail: err.message });
+  }
+});
+
+app.put('/api/admin/responses/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'invalid id' });
+    }
+
+    const payload = pickResponsePayload(req.body);
+    const updated = await Response.findByIdAndUpdate(id, payload, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!updated) {
+      return res.status(404).json({ error: 'not found' });
+    }
+
+    res.json({ data: updated });
+  } catch (err) {
+    console.error('💥 管理更新失败:', err);
+    res.status(500).json({ error: '服务器内部错误', detail: err.message });
+  }
+});
+
+app.delete('/api/admin/responses/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'invalid id' });
+    }
+
+    const deleted = await Response.findByIdAndDelete(id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'not found' });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('💥 管理删除失败:', err);
     res.status(500).json({ error: '服务器内部错误', detail: err.message });
   }
 });
