@@ -2,15 +2,26 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const axios = require('axios');
-const config = require('./env');
+let config = {};
+try {
+  config = require('./env');
+} catch (err) {
+  console.warn('⚠️ env.js 未找到，将跳过微信 openid 能力配置');
+}
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
 // === MongoDB 连接 ===
-mongoose.connect('mongodb://127.0.0.1:27017/survey_app')
-    .then(() => console.log('✅ MongoDB connected'))
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/survey_app';
+const DB_NAME = process.env.MONGO_DB_NAME || undefined;
+
+mongoose.connect(MONGO_URI, {
+    dbName: DB_NAME,
+    serverSelectionTimeoutMS: 5000,
+  })
+    .then(() => console.log(`✅ MongoDB connected: ${mongoose.connection.name}`))
     .catch(err => console.error(err));
 
 // === 定义数据模型 ===
@@ -26,6 +37,8 @@ const responseSchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
 });
 const Response = mongoose.model('Response', responseSchema);
+
+const maskMongoUri = (uri) => uri.replace(/\/\/([^:/]+):([^@]+)@/, '//$1:***@');
 
 const toNumber = (value, fallback) => {
   const parsed = Number(value);
@@ -301,18 +314,7 @@ app.get('/api/admin/responses', async (req, res) => {
 });
 
 app.post('/api/admin/responses', async (req, res) => {
-  try {
-    const payload = pickResponsePayload(req.body);
-    if (!payload.wx_id) {
-      return res.status(400).json({ error: 'wx_id required' });
-    }
-
-    const created = await Response.create(payload);
-    res.json({ data: created });
-  } catch (err) {
-    console.error('💥 管理新增失败:', err);
-    res.status(500).json({ error: '服务器内部错误', detail: err.message });
-  }
+  res.status(405).json({ error: '新增记录功能已关闭' });
 });
 
 app.put('/api/admin/responses/:id', async (req, res) => {
@@ -358,7 +360,34 @@ app.delete('/api/admin/responses/:id', async (req, res) => {
   }
 });
 
+app.get('/api/admin/db-diagnostics', async (_req, res) => {
+  try {
+    const [responsesCount, inProgressCount, completedCount, latest] = await Promise.all([
+      Response.countDocuments({}),
+      Response.countDocuments({ status: 'in-progress' }),
+      Response.countDocuments({ status: 'completed' }),
+      Response.findOne({}).sort({ createdAt: -1 }).select('_id wx_id status createdAt updatedAt'),
+    ]);
+
+    res.json({
+      data: {
+        mongoUri: maskMongoUri(MONGO_URI),
+        dbName: mongoose.connection.name,
+        counts: {
+          responses: responsesCount,
+          inProgress: inProgressCount,
+          completed: completedCount,
+        },
+        latest,
+      },
+    });
+  } catch (err) {
+    console.error('💥 诊断接口失败:', err);
+    res.status(500).json({ error: '服务器内部错误', detail: err.message });
+  }
+});
+
 // === 启动 HTTP 服务 ===
 app.listen(3000, () => {
-    console.log('🚀 HTTP server listening on port 3000');
+    console.log(`🚀 HTTP server listening on port 3000, mongo=${maskMongoUri(MONGO_URI)}`);
 });
