@@ -53,13 +53,19 @@ const toNumber = (value, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const toDurationSeconds = (value, fallback = 0) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(Math.floor(parsed), 0);
+};
+
 const pickResponsePayload = (body = {}) => {
   const payload = {};
 
   if (body.wx_id !== undefined) payload.wx_id = body.wx_id;
   if (body.user_info !== undefined) payload.user_info = body.user_info;
   if (body.answers !== undefined) payload.answers = Array.isArray(body.answers) ? body.answers : [];
-  if (body.duration !== undefined) payload.duration = toNumber(body.duration, 0);
+  if (body.duration !== undefined) payload.duration = toDurationSeconds(body.duration, 0);
   if (body.current_question !== undefined) payload.current_question = toNumber(body.current_question, 1);
   if (body.score !== undefined) payload.score = toNumber(body.score, 0);
   if (body.status !== undefined) payload.status = body.status;
@@ -154,7 +160,7 @@ app.post('/api/save-progress', async (req, res) => {
       }
 
       record.answers = answers ?? record.answers;
-      record.duration = duration ?? record.duration;
+      if (duration !== undefined) record.duration = toDurationSeconds(duration, record.duration || 0);
       record.current_question = current_question ?? record.current_question;
       record.user_info = user_info ?? record.user_info;
       record.updatedAt = new Date();
@@ -164,7 +170,7 @@ app.post('/api/save-progress', async (req, res) => {
       record = await Response.findOne({ wx_id, status: 'in-progress' }).sort({ updatedAt: -1 });
       if (record) {
         record.answers = answers ?? record.answers;
-        record.duration = duration ?? record.duration;
+        if (duration !== undefined) record.duration = toDurationSeconds(duration, record.duration || 0);
         record.current_question = current_question ?? record.current_question;
         record.user_info = user_info ?? record.user_info;
         record.updatedAt = new Date();
@@ -174,7 +180,7 @@ app.post('/api/save-progress', async (req, res) => {
           wx_id,
           user_info,
           answers,
-          duration,
+          duration: toDurationSeconds(duration, 0),
           current_question,
           status: 'in-progress',
           updatedAt: new Date(),
@@ -252,7 +258,7 @@ app.post('/api/submit', async (req, res) => {
       if (!record) return res.status(404).json({ error: 'draft not found' });
 
       record.answers = answers;
-      record.duration = Math.ceil(duration || 0);
+      record.duration = toDurationSeconds(duration, 0);
       record.current_question = 38;
       record.score = score;
       record.status = 'completed';
@@ -264,7 +270,7 @@ app.post('/api/submit', async (req, res) => {
       record = await Response.findOne({ wx_id, status: 'in-progress' }).sort({ updatedAt: -1 });
       if (record) {
         record.answers = answers;
-        record.duration = Math.ceil(duration || 0);
+        record.duration = toDurationSeconds(duration, 0);
         record.current_question = 38;
         record.score = score;
         record.status = 'completed';
@@ -276,7 +282,7 @@ app.post('/api/submit', async (req, res) => {
           wx_id,
           user_info: user_info || {},
           answers,
-          duration: Math.ceil(duration || 0),
+          duration: toDurationSeconds(duration, 0),
           current_question: 38,
           score,
           status: 'completed',
