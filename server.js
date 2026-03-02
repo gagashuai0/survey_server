@@ -4,17 +4,22 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const axios = require('axios');
+const jwt = require('jsonwebtoken');
 let config = {};
 try {
   config = require('./env');
 } catch (err) {
-  console.warn('⚠️ env.js 未找到，将跳过微信 openid 能力配置');
+  console.warn('⚠️ env.js 未找到，将使用内置默认配置（建议按 env.example.js 创建）');
 }
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 const PORT = Number(process.env.PORT || config.PORT || 3000);
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || config.ADMIN_USERNAME || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || config.ADMIN_PASSWORD || 'admin123456';
+const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || config.ADMIN_JWT_SECRET || 'survey-admin-secret';
+const ADMIN_TOKEN_EXPIRES_IN = process.env.ADMIN_TOKEN_EXPIRES_IN || '12h';
 
 // === MongoDB 连接 ===
 const MONGO_URI = process.env.MONGO_URI || config.MONGO_URI || 'mongodb://127.0.0.1:27017/survey_app';
@@ -62,6 +67,27 @@ const pickResponsePayload = (body = {}) => {
 
   payload.updatedAt = new Date();
   return payload;
+};
+
+const getBearerToken = (req) => {
+  const authorization = req.headers.authorization || '';
+  if (!authorization.startsWith('Bearer ')) return '';
+  return authorization.slice(7).trim();
+};
+
+const requireAdminAuth = (req, res, next) => {
+  const token = getBearerToken(req);
+  if (!token) {
+    return res.status(401).json({ error: '未登录或登录已过期', code: 'UNAUTHORIZED' });
+  }
+
+  try {
+    const payload = jwt.verify(token, ADMIN_JWT_SECRET);
+    req.adminUser = { username: payload.username };
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: '登录凭证无效，请重新登录', code: 'UNAUTHORIZED' });
+  }
 };
 
 // === 路由 ===
@@ -270,6 +296,40 @@ app.post('/api/submit', async (req, res) => {
 });
 
 // === 管理后台 CRUD 接口 ===
+app.post('/api/admin/login', (req, res) => {
+  const { username, password } = req.body || {};
+
+  if (!username || !password) {
+    return res.status(400).json({ error: '用户名和密码必填' });
+  }
+
+  if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: '用户名或密码错误', code: 'UNAUTHORIZED' });
+  }
+
+  const token = jwt.sign({ username }, ADMIN_JWT_SECRET, {
+    expiresIn: ADMIN_TOKEN_EXPIRES_IN,
+  });
+
+  res.json({
+    data: {
+      token,
+      username,
+      expiresIn: ADMIN_TOKEN_EXPIRES_IN,
+    },
+  });
+});
+
+app.use('/api/admin', requireAdminAuth);
+
+app.get('/api/admin/me', (req, res) => {
+  res.json({
+    data: {
+      username: req.adminUser?.username || ADMIN_USERNAME,
+    },
+  });
+});
+
 app.get('/api/admin/responses', async (req, res) => {
   try {
     const {
