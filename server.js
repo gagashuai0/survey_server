@@ -135,8 +135,7 @@ app.get('/api/getOpenid', async (req, res) => {
             return res.status(400).json({ error: wxResp.data });
         }
         res.json({
-            openid: wxResp.data.openid,
-            session_key: wxResp.data.session_key
+            openid: wxResp.data.openid
         });
     } catch (err) {
         console.error(err);
