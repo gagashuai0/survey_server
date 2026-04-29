@@ -1,0 +1,24 @@
+server.js
+  1cdd722ce9260102 138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "e6e14037fd177a15f1fccc4c0ae613e646ce99bb",
+  "prompts": {
+    "1cdd722ce9260102": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd7ad-809a-77e2-9a4e-e840df3ac308",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tuguang",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 2,
+      "accepted_lines": 1,
+      "overriden_lines": 0,
+      "messages_url": "https://usegitai.com/cas/032fd13e60807bdee3b67a644a3f231e3b5b31f3529e7bdde012b985fbce75b6"
+    }
+  }
+}
